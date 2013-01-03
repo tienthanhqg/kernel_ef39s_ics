@@ -11,7 +11,6 @@
  *
  */
 #include <linux/clk.h>
-#include <mach/clk.h>
 #include "msm_fb.h"
 #include "mdp.h"
 #include "mdp4.h"
@@ -228,6 +227,45 @@ static void mipi_dsi_ahb_en(void)
 		__func__, (int) ahb, MIPI_INP_SECURE(ahb));
 }
 
+void mipi_dsi_lane_cfg(void)
+{
+	int i, ln_offset;
+
+	ln_offset = 0x300;
+	for (i = 0; i < 4; i++) {
+		/* DSI1_DSIPHY_LN_CFG0 */
+		MIPI_OUTP(MIPI_DSI_BASE + ln_offset, 0x80);
+		/* DSI1_DSIPHY_LN_CFG1 */
+		MIPI_OUTP(MIPI_DSI_BASE + ln_offset + 0x04, 0x45);
+		/* DSI1_DSIPHY_LN_CFG2 */
+		MIPI_OUTP(MIPI_DSI_BASE + ln_offset + 0x08, 0x0);
+		/* DSI1_DSIPHY_LN_TEST_DATAPATH */
+		MIPI_OUTP(MIPI_DSI_BASE + ln_offset + 0x0c, 0x0);
+		/* DSI1_DSIPHY_LN_TEST_STR0 */
+		MIPI_OUTP(MIPI_DSI_BASE + ln_offset + 0x14, 0x1);
+		/* DSI1_DSIPHY_LN_TEST_STR1 */
+		MIPI_OUTP(MIPI_DSI_BASE + ln_offset + 0x18, 0x66);
+		ln_offset += 0x40;
+	}
+
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0400, 0x40); /* DSI1_DSIPHY_LNCK_CFG0 */
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0404, 0x67); /* DSI1_DSIPHY_LNCK_CFG1 */
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0408, 0x0); /* DSI1_DSIPHY_LNCK_CFG2 */
+	/* DSI1_DSIPHY_LNCK_TEST_DATAPATH */
+	MIPI_OUTP(MIPI_DSI_BASE + 0x040c, 0x0);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0414, 0x1); /* DSI1_DSIPHY_LNCK_TEST_STR0 */
+	/* DSI1_DSIPHY_LNCK_TEST_STR1 */
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0418, 0x88);
+}
+
+void mipi_dsi_bist_ctrl(void)
+{
+	MIPI_OUTP(MIPI_DSI_BASE + 0x049c, 0x0f); /* DSI1_DSIPHY_BIST_CTRL4 */
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0490, 0x03); /* DSI1_DSIPHY_BIST_CTRL1 */
+	MIPI_OUTP(MIPI_DSI_BASE + 0x048c, 0x03); /* DSI1_DSIPHY_BIST_CTRL0 */
+	MIPI_OUTP(MIPI_DSI_BASE + 0x049c, 0x0); /* DSI1_DSIPHY_BIST_CTRL4 */
+}
+
 static void mipi_dsi_calibration(void)
 {
 	int i = 0;
@@ -235,7 +273,7 @@ static void mipi_dsi_calibration(void)
 	int cal_busy = MIPI_INP(MIPI_DSI_BASE + 0x550);
 
 	/* DSI1_DSIPHY_REGULATOR_CAL_PWR_CFG */
-	MIPI_OUTP(MIPI_DSI_BASE + 0x0518, 0x01);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0518, 0x03);
 
 	/* DSI1_DSIPHY_CAL_SW_CFG2 */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0534, 0x0);
@@ -484,13 +522,18 @@ void mipi_dsi_phy_init(int panel_ndx, struct msm_panel_info const *panel_info,
 	int i, off;
 
 	MIPI_OUTP(MIPI_DSI_BASE + 0x128, 0x0001);/* start phy sw reset */
-	msleep(100);
+	wmb();
+	usleep(1);
 	MIPI_OUTP(MIPI_DSI_BASE + 0x128, 0x0000);/* end phy w reset */
+	wmb();
+	usleep(1);
 	MIPI_OUTP(MIPI_DSI_BASE + 0x500, 0x0003);/* regulator_ctrl_0 */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x504, 0x0001);/* regulator_ctrl_1 */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x508, 0x0001);/* regulator_ctrl_2 */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x50c, 0x0000);/* regulator_ctrl_3 */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x510, 0x0100);/* regulator_ctrl_4 */
+
+	MIPI_OUTP(MIPI_DSI_BASE + 0x4b0, 0x04);/* DSIPHY_LDO_CNTRL */
 
 	pd = (panel_info->mipi).dsi_phy_db;
 
@@ -515,6 +558,8 @@ void mipi_dsi_phy_init(int panel_ndx, struct msm_panel_info const *panel_info,
 		off += 4;
 	}
 	mipi_dsi_calibration();
+	mipi_dsi_lane_cfg(); /* lane cfgs */
+	mipi_dsi_bist_ctrl(); /* bist ctrl */
 
 	off = 0x0204;	/* pll ctrl 1 - 19, skip 0 */
 	for (i = 1; i < 20; i++) {
@@ -589,8 +634,8 @@ void mipi_dsi_clk_enable(void)
 	if (clk_set_rate(dsi_byte_div_clk, 1) < 0)	/* divided by 1 */
 		pr_err("%s: dsi_byte_div_clk - "
 			"clk_set_rate failed\n", __func__);
-	if (clk_set_rate(dsi_esc_clk, 2) < 0) /* divided by 2 */
-		pr_err("%s: dsi_esc_clk - "
+	if (clk_set_rate(dsi_esc_clk, esc_byte_ratio) < 0) /* divided by esc */
+		pr_err("%s: dsi_esc_clk - "			 /* clk ratio */
 			"clk_set_rate failed\n", __func__);
 	mipi_dsi_pclk_ctrl(&dsi_pclk, 1);
 	mipi_dsi_clk_ctrl(&dsicore_clk, 1);
@@ -679,10 +724,6 @@ void hdmi_msm_reset_core(void)
 	hdmi_msm_clk(0);
 	udelay(5);
 	hdmi_msm_clk(1);
-
-	clk_reset(hdmi_msm_state->hdmi_app_clk, CLK_RESET_ASSERT);
-	udelay(20);
-	clk_reset(hdmi_msm_state->hdmi_app_clk, CLK_RESET_DEASSERT);
 }
 
 void hdmi_msm_init_phy(int video_format)

@@ -76,6 +76,7 @@ const char edid_blk1[0x100] = {
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDF};
 #endif /* DEBUG_EDID */
 
+#ifdef CONFIG_FB_MSM_HDMI_MHL
 #define DMA_E_BASE 0xB0000
 void mdp_vid_quant_set(void)
 {
@@ -92,6 +93,15 @@ void mdp_vid_quant_set(void)
 		MDP_OUTP(MDP_BASE + DMA_E_BASE + 0x78, 0x00FF0000);
 	}
 }
+#else
+void mdp_vid_quant_set(void)
+{
+	/*
+	 * Support for quantization to be added
+	 * only when MHL support is included.
+	 */
+}
+#endif
 
 const char *video_format_2string(uint32 format)
 {
@@ -366,6 +376,7 @@ static ssize_t hdmi_common_wta_hpd(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	ssize_t ret = strnlen(buf, PAGE_SIZE);
+#ifndef CONFIG_LGE_MHL_SII9244	
 	int hpd;
 	if (hdmi_prim_display)
 		hpd = 1;
@@ -390,6 +401,7 @@ static ssize_t hdmi_common_wta_hpd(struct device *dev,
 	} else {
 		DEV_DBG("%s: 'not supported'\n", __func__);
 	}
+#endif //CONFIG_LGE_MHL_SII9244	
 
 	return ret;
 }
@@ -1574,7 +1586,7 @@ bool hdmi_common_get_video_format_from_drv_data(struct msm_fb_data_type *mfd)
 				: HDMI_VFRMT_1440x576i50_16_9;
 			break;
 		case 1920:
-#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244  // 20110429, kkcho, MHL»ç¿ëÀ» À§ÇØ HDMI OUTPUT format À» ³·Ãá´Ù... (temp´Ù )	
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244  // 20110429, kkcho, MHL??? ?? HDMI OUTPUT format ? ???... (temp? )	
 			format = HDMI_VFRMT_1920x1080p30_16_9;//HDMI_VFRMT_1280x720p50_16_9;
 #else
 			format = HDMI_VFRMT_1920x1080p60_16_9;
@@ -1664,7 +1676,7 @@ void hdmi_common_init_panel_info(struct msm_panel_info *pinfo)
 	pinfo->wait_cycle = 0;
 	pinfo->bpp = 24;
 	if (hdmi_prim_display)
-	pinfo->fb_num = 2;
+		pinfo->fb_num = 2;
 	else
 #ifdef CONFIG_F_SKYDISP_HDMI_CAPTION
 	pinfo->fb_num = 2; // For double buffering

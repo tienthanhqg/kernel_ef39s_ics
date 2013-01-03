@@ -274,6 +274,10 @@ extern struct mdp_hist_mgmt *mdp_hist_mgmt_array[];
 #ifdef CONFIG_FB_MSM_MDP40
 #define MDP_OVERLAY0_TERM 0x20
 #define MDP_OVERLAY1_TERM 0x40
+#define MDP_DMAP_TERM MDP_DMA2_TERM	/* dmap == dma2 */
+#define MDP_PRIM_VSYNC_TERM 0x100
+#define MDP_EXTER_VSYNC_TERM 0x200
+#define MDP_PRIM_RDPTR_TERM 0x400
 #endif
 #define MDP_OVERLAY2_TERM 0x80
 #define MDP_HISTOGRAM_TERM_DMA_P 0x100
@@ -701,6 +705,7 @@ extern struct mdp_hist_mgmt *mdp_hist_mgmt_array[];
 void mdp_hw_init(void);
 int mdp_ppp_pipe_wait(void);
 void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd);
+void mdp_clk_ctrl(int on);
 void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 		   boolean isr);
 void mdp_set_dma_pan_info(struct fb_info *info, struct mdp_dirty_region *dirty,
@@ -746,7 +751,31 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd);
 int mdp_dsi_video_on(struct platform_device *pdev);
 int mdp_dsi_video_off(struct platform_device *pdev);
 void mdp_dsi_video_update(struct msm_fb_data_type *mfd);
-void mdp3_dsi_cmd_dma_busy_wait(struct msm_fb_data_type *mfd);
+void mdp3_dsi_cmd_dma_busy_wait(struct msm_fb_data_type *mfd)
+static inline int mdp4_dsi_cmd_off(struct platform_device *pdev)
+{
+	return 0;
+}
+static inline int mdp4_dsi_video_off(struct platform_device *pdev)
+{
+	return 0;
+}
+static inline int mdp4_lcdc_off(struct platform_device *pdev)
+{
+	return 0;
+}
+static inline int mdp4_dsi_cmd_on(struct platform_device *pdev)
+{
+	return 0;
+}
+static inline int mdp4_dsi_video_on(struct platform_device *pdev)
+{
+	return 0;
+}
+static inline int mdp4_lcdc_on(struct platform_device *pdev)
+{
+	return 0;
+}
 #endif
 
 void set_cont_splashScreen_status(int);
@@ -781,6 +810,8 @@ static inline int mdp_bus_scale_update_request(uint32_t index)
 #endif
 
 #ifdef MDP_HW_VSYNC
+void vsync_clk_enable(void);
+void vsync_clk_disable(void);
 void mdp_hw_vsync_clk_enable(struct msm_fb_data_type *mfd);
 void mdp_hw_vsync_clk_disable(struct msm_fb_data_type *mfd);
 void mdp_vsync_clk_disable(void);
@@ -800,6 +831,7 @@ int mdp_histogram_block2mgmt(uint32_t block, struct mdp_hist_mgmt **mgmt);
 void mdp_histogram_handle_isr(struct mdp_hist_mgmt *mgmt);
 void __mdp_histogram_kickoff(struct mdp_hist_mgmt *mgmt);
 void __mdp_histogram_reset(struct mdp_hist_mgmt *mgmt);
+unsigned int mdp_check_suspended(void);
 void mdp_footswitch_ctrl(boolean on);
 
 #ifdef CONFIG_FB_MSM_MDP303
@@ -824,11 +856,20 @@ static inline int mdp4_overlay_dsi_state_get(void)
 
 void mdp_vid_quant_set(void);
 #ifndef CONFIG_FB_MSM_MDP40
-static inline void mdp_dsi_cmd_overlay_suspend(void)
+static inline void mdp_dsi_cmd_overlay_suspend(struct msm_fb_data_type *mfd)
 {
 	/* empty */
 }
+static inline void mdp4_iommu_detach(void)
+{
+    /* empty */
+}
 #endif
 
-void mdp_vid_quant_set(void);
+int mdp_ppp_v4l2_overlay_set(struct fb_info *info, struct mdp_overlay *req);
+int mdp_ppp_v4l2_overlay_clear(void);
+int mdp_ppp_v4l2_overlay_play(struct fb_info *info,
+	unsigned long srcp0_addr, unsigned long srcp0_size,
+	unsigned long srcp1_addr, unsigned long srcp1_size);
+
 #endif /* MDP_H */

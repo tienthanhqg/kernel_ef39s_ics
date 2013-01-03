@@ -927,11 +927,6 @@ static void hdmi_msm_hpd_state_work(struct work_struct *work)
 			kobject_uevent(external_common_state->uevent_kobj,
 				KOBJ_ONLINE);
 			hdmi_msm_hdcp_enable();
-
-#if 0//def CONFIG_QUALCOMM_FIX_TMDS_OUT
-			DEV_INFO("HDMI TMDS: HDMI TMDS out\n");
-			hdmi_start();//mark.
-#endif
 #ifndef CONFIG_FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT
 			/* Send Audio for HDMI Compliance Cases*/
 			envp[0] = "HDCP_STATE=PASS";
@@ -2596,6 +2591,12 @@ static int hdcp_authentication_part1(void)
 			goto error;
 		}
 
+		/*
+		 * A small delay is needed here to avoid device crash observed
+		 * during reauthentication in MSM8960
+		 */
+		msleep(20);
+
 		/* 0x0168 HDCP_RCVPORT_DATA12
 		   [23:8] BSTATUS
 		   [7:0] BCAPS */
@@ -3748,13 +3749,13 @@ static int hdmi_msm_audio_off(void)
 	return 0;
 }
 
-
+/* modified AVIInfoFrame for 480p,576p - chanhee.park@lge.com*/
 static uint8 hdmi_msm_avi_iframe_lut[][16] = {
 /*	480p60	480i60	576p50	576i50	720p60	 720p50	1080p60	1080i60	1080p50
 	1080i50	1080p24	1080p30	1080p25	640x480p 480p60_16_9 576p50_4_3 */
 	{0x10,	0x10,	0x10,	0x10,	0x10,	 0x10,	0x10,	0x10,	0x10,
 	 0x10,	0x10,	0x10,	0x10,	0x10, 0x10, 0x10}, /*00*/
-	{0x18,	0x18,	0x28,	0x28,	0x28,	 0x28,	0x28,	0x28,	0x28,
+	{/*0x18*/0x28,	0x18,	0x28,	0x28,	0x28,	 0x28,	0x28,	0x28,	0x28,
 	 0x28,	0x28,	0x28,	0x28,	0x18, 0x28, 0x18}, /*01*/
 #ifdef F_SKY_HDMI_AUTH_CHECK_VALID_AVI_PACKETS 
 	{0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,
@@ -4082,8 +4083,6 @@ static void hdmi_msm_turn_on(void)
 	/* HDMI_USEC_REFTIMER[0x0208] */
 	HDMI_OUTP(0x0208, 0x0001001B);
 
-	hdmi_msm_set_mode(TRUE);
-
 	hdmi_msm_video_setup(external_common_state->video_resolution);
 	if (!hdmi_msm_is_dvi_mode())
 		hdmi_msm_audio_setup();
@@ -4098,6 +4097,8 @@ static void hdmi_msm_turn_on(void)
 	/* Toggle HPD circuit to trigger HPD sense */
 	HDMI_OUTP(0x0258, ~(1 << 28) & hpd_ctrl);
 	HDMI_OUTP(0x0258, (1 << 28) | hpd_ctrl);
+
+	hdmi_msm_set_mode(TRUE);
 
 	/* Setup HPD IRQ */
 	HDMI_OUTP(0x0254, 4 | (external_common_state->hpd_state ? 0 : 2));
@@ -4263,9 +4264,6 @@ static int hdmi_msm_hpd_on(bool trigger_handler)
 
 	hdmi_msm_set_mode(TRUE);
 
-#ifdef CONFIG_PANTECH_MHL_SUSPEND_RESUME
-///enable_irq(hdmi_msm_state->irq);
-#endif
 	return 0;
 }
 
@@ -4323,6 +4321,7 @@ static int hdmi_msm_power_on(struct platform_device *pdev)
 		mutex_unlock(&external_common_state_hpd_mutex);
 
 	hdmi_msm_dump_regs("HDMI-ON: ");
+	msleep(30); /* prevent power reset - jinho83.kim@lge.com */
 
 	DEV_INFO("power=%s DVI= %s\n",
 		hdmi_msm_is_power_on() ? "ON" : "OFF" ,
@@ -4750,7 +4749,8 @@ static int __init hdmi_msm_init(void)
 	external_common_state->video_resolution = HDMI_VFRMT_1920x1080p30_16_9;//HDMI_VFRMT_1280x720p50_16_9;
 #else	
 	external_common_state->video_resolution = HDMI_VFRMT_1920x1080p60_16_9;
-#endif	
+#endif
+
 #ifdef CONFIG_FB_MSM_HDMI_3D
 	external_common_state->switch_3d = hdmi_msm_switch_3d;
 #endif

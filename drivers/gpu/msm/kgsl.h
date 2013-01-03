@@ -25,8 +25,9 @@
 
 #define KGSL_NAME "kgsl"
 
-/* Timestamp window used to detect rollovers (half of integer range) */
+/* Timestamp window used to detect rollovers */
 #define KGSL_TIMESTAMP_WINDOW 0x80000000
+
 
 /*cache coherency ops */
 #define DRM_KGSL_GEM_CACHE_OP_TO_DEV	0x0001
@@ -95,8 +96,6 @@ struct kgsl_driver {
 	struct {
 		unsigned int vmalloc;
 		unsigned int vmalloc_max;
-		unsigned int page_alloc;
-		unsigned int page_alloc_max;
 		unsigned int coherent;
 		unsigned int coherent_max;
 		unsigned int mapped;
@@ -195,37 +194,37 @@ static inline int kgsl_gpuaddr_in_memdesc(const struct kgsl_memdesc *memdesc,
 	}
 	return 0;
 }
+
+static inline void *kgsl_memdesc_map(struct kgsl_memdesc *memdesc)
+{
+	if (memdesc->hostptr == NULL && memdesc->ops &&
+		memdesc->ops->map_kernel_mem)
+		memdesc->ops->map_kernel_mem(memdesc);
+
+	return memdesc->hostptr;
+}
+
 static inline uint8_t *kgsl_gpuaddr_to_vaddr(struct kgsl_memdesc *memdesc,
 					     unsigned int gpuaddr)
 {
-	if (memdesc->gpuaddr == 0 ||
-		gpuaddr < memdesc->gpuaddr ||
-		gpuaddr >= (memdesc->gpuaddr + memdesc->size) ||
-		(NULL == memdesc->hostptr && memdesc->ops->map_kernel_mem &&
-			memdesc->ops->map_kernel_mem(memdesc)))
-			return NULL;
+	void *hostptr = NULL;
 
-	return memdesc->hostptr + (gpuaddr - memdesc->gpuaddr);
+	if ((gpuaddr >= memdesc->gpuaddr) &&
+		(gpuaddr < (memdesc->gpuaddr + memdesc->size)))
+		hostptr = kgsl_memdesc_map(memdesc);
+
+	return hostptr != NULL ? hostptr + (gpuaddr - memdesc->gpuaddr) : NULL;
 }
 
-static inline int timestamp_cmp(unsigned int a, unsigned int b)
+static inline int timestamp_cmp(unsigned int new, unsigned int old)
 {
-	/* check for equal */
-	if (a == b)
+	int ts_diff = new - old;
+
+	if (ts_diff == 0)
 		return 0;
 
-	/* check for greater-than for non-rollover case */
-	if ((a > b) && (a - b < KGSL_TIMESTAMP_WINDOW))
-		return 1;
-
-	/* check for greater-than for rollover case
-	 * note that <= is required to ensure that consistent
-	 * results are returned for values whose difference is
-	 * equal to the window size
-	 */
-	a += KGSL_TIMESTAMP_WINDOW;
-	b += KGSL_TIMESTAMP_WINDOW;
-	return ((a > b) && (a - b <= KGSL_TIMESTAMP_WINDOW)) ? 1 : -1;
+	//return ((ts_diff > 0) || (ts_diff < -20000)) ? 1 : -1;
+	return ((ts_diff > 0) || (ts_diff < -KGSL_TIMESTAMP_WINDOW)) ? 1 : -1;
 }
 
 static inline void
